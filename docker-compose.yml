@@ -1,0 +1,186 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - 5672:5672
+      - 15672:15672
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+
+  mysql_creditcard:
+    image: mysql:latest
+    container_name: kredinbizden_credit_card
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: kredinbizden_credit_card
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: password
+
+  mysql_loan:
+    image: mysql:latest
+    container_name: kredinbizden_loan
+    ports:
+      - "3308:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: kredinbizden_loan
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: password
+
+  mysql_offer:
+    image: mysql:latest
+    container_name: kredinbizden_offer
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: kredinbizden_offer
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: password
+
+  postgres_user_db:
+    image: postgres:latest
+    container_name: kredinbizde_user_db
+    environment:
+      POSTGRES_DB: kredinbizde_user_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  eureka-server:
+    image: kredinbizden-discovery-service:latest
+    ports:
+      - "8761:8761"
+
+  notification-service:
+    image: notification-service:latest
+    ports:
+      - "8088:8088"
+    environment:
+      - SPRING_APPLICATION_NAME=notification-service
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - SPRING_RABBITMQ_PORT=5672
+      - SPRING_RABBITMQ_USERNAME=guest
+      - SPRING_RABBITMQ_PASSWORD=guest
+    depends_on:
+      - rabbitmq
+
+  akbank-service:
+    image: akbank-service:latest
+    ports:
+      - "8083:8083"
+    environment:
+      - SPRING_APPLICATION_NAME=akbank-service
+      - OFFER_SERVICE_URL=http://kredinbizden_offer:8085/offers
+    depends_on:
+      - eureka-server
+      - rabbitmq
+      - mongodb
+
+  garanti-service:
+    image: garanti-service:latest
+    ports:
+      - "8089:8089"
+    environment:
+      - SPRING_APPLICATION_NAME=garanti-service
+      - OFFER_SERVICE_URL=http://kredinbizden_offer:8085/offers
+    depends_on:
+      - eureka-server
+      - rabbitmq
+      - mongodb
+
+  kredinbizde-credit-card:
+    image: kredinbizden-credit-card-service:latest
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_APPLICATION_NAME=kredinbizde-credit-card
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka
+    depends_on:
+      - eureka-server
+      - mysql_creditcard
+
+  kredinbizde-discovery:
+    image: kredinbizden-discovery-service:latest
+    ports:
+      - "8766:8766"
+    environment:
+      - SERVER_PORT=8766
+      - SPRING_APPLICATION_NAME=kredinbizde-discovery
+      - EUREKA_CLIENT_REGISTERWITHEUREKA=false
+      - EUREKA_CLIENT_FETCHREGISTRY=false
+
+  kredinbizde-gateway:
+    image: kredinbizden-gw-service:latest
+    ports:
+      - "8084:8084"
+    environment:
+      - SERVER_PORT=8084
+      - SPRING_APPLICATION_NAME=kredinbizde-gateway
+    depends_on:
+      - eureka-server
+      - akbank-service
+
+  kredinbizde-loan:
+    image: kredinbizde-loan-service:latest
+    ports:
+      - "8087:8087"
+    environment:
+      - SPRING_APPLICATION_NAME=kredinbizde-loan
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka
+    depends_on:
+      - eureka-server
+      - mysql_loan
+
+  kredinbizde-offer:
+    image: kredinbizde-offer-service:latest
+    ports:
+      - "8085:8085"
+    environment:
+      - SPRING_APPLICATION_NAME=kredinbizde-offer
+      - SPRING_DATASOURCE_URL=jdbc:mysql://kredinbizden_offer:3306/kredinbizden_offer
+      - SPRING_DATASOURCE_USERNAME=admin
+      - SPRING_DATASOURCE_PASSWORD=password
+      - SPRING_JPA_HIBERNATE_DDL-AUTO=update
+    depends_on:
+      - mysql_offer
+
+  kredinbizde-user:
+    image: kredinbizde-user-service:latest
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_APPLICATION_NAME=kredinbizde-user
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres_user_db:5432/kredinbizde_user_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
+      - SPRING_JPA_HIBERNATE_DDL-AUTO=update
+    depends_on:
+      - eureka-server
+      - postgres_user_db
+networks:
+  microservices_network:
+
+volumes:
+  pgdata: {}
